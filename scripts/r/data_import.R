@@ -1,6 +1,6 @@
 library(tidyverse)
 library(openssl)
-library(stringr)
+library(stringi)
 load_grades <- function(data_dir, is_pandemic) {
     res <- data.frame()
     
@@ -12,6 +12,8 @@ load_grades <- function(data_dir, is_pandemic) {
         
         godina <- str[1]
         odeljenje <- str[2]
+        
+        print(f)
         
         path <- paste(data_dir, f, sep = "")
         
@@ -29,7 +31,7 @@ load_grades <- function(data_dir, is_pandemic) {
         
         drop <- c(gradjansko, veronauka)
         
-        data <- data[, colSums(is.na(data)) < 0.8 * nrow(data)]
+        data <- data[, colSums(is.na(data)) < 0.9 * nrow(data)]
         
         data <- data[, !names(data) %in% drop]
         
@@ -49,7 +51,7 @@ load_grades <- function(data_dir, is_pandemic) {
             tmp$godina <- godina
             tmp$odeljenje <- odeljenje
             tmp$pandemija <- is_pandemic
-            class_data <- rbind(tmp)
+            class_data <- rbind(class_data, tmp)
             
         }
         res <- rbind(res, class_data)
@@ -57,4 +59,10 @@ load_grades <- function(data_dir, is_pandemic) {
     }
     return(res)
 }
-res <- load_grades("data/covid/ocene/", T)
+
+covid_data <- load_grades("data/covid/ocene/", T)
+pre_covid_data <- load_grades("data/pre-covid/ocene/", F)
+
+all_data <- rbind(covid_data, pre_covid_data)
+
+write.csv(all_data, file = "all_grades.csv", row.names = F)
