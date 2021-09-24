@@ -43,7 +43,9 @@ ui <- dashboardPage(
                     plotlyOutput("uspehCompHist")
                 ),
                 box(
-                    plotOutput("uspehPoPredmetima")
+                    sliderInput("numSubjects", "Broj predmeta", min = 1, max = 10, value = 3),
+                    checkboxInput("poslednji", "Najmanja promena"),
+                    plotlyOutput("najpogodjenijiPredmeti")
                 ))),
         tabItem(
             tabName = 'izostanci',
@@ -109,15 +111,34 @@ server <- function(input, output, session) {
             theme(legend.position = "bottom") +
             xlab("ocena") + ylab("broj ocena")
     })
-    output$studentAttendanceDataTable <- renderDataTable({
-        cols <- c(1,2,3,4,6,8,12,13,14)
+    
+    output$najpogodjenijiPredmeti <- renderPlotly({
+        no_fac <- rv$data %>% filter(!grepl("факулта", predmet))
+        dT <- no_fac %>% filter(pandemija == T) %>% group_by(predmet) %>% summarise(prosek = mean(ocena))
+        dF <- no_fac %>% filter(pandemija == F) %>% group_by(predmet) %>% summarise(prosek = mean(ocena))
         
-        rv$ca_data[,cols]
+        multi <- if_else(input$poslednji, 1, -1)
+        
+        df <- merge(x = dF, y = dT, by = "predmet") %>% 
+            mutate(promena = prosek.y - prosek.x)
+        df <- head(df[order(multi*df$promena), ], input$numSubjects)
+        
+        df %>% ggplot(aes(x=reorder(predmet, promena), y=promena)) + 
+            geom_col(aes(stat = , fill=predmet)) + coord_flip()
+        
+        
     })
-    output$classAttendanceDataTable <- renderDataTable({
-        cols <- c(1,5,7,9,10,11,12,13,14)
+    
+    output$studentAttendanceDataTable <- renderDataTable({
+        cols <- c(1, 2, 3, 4, 6, 8, 12, 13, 14)
         
-        rv$ca_data[,cols]
+        rv$ca_data[, cols]
+    })
+    
+    output$classAttendanceDataTable <- renderDataTable({
+        cols <- c(1, 5, 7, 9, 10, 11, 12, 13, 14)
+        
+        rv$ca_data[, cols]
     })
 }
 shinyApp(ui, server)
