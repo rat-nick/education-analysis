@@ -1,4 +1,4 @@
-"polugodiste","ucenika sa izostancima","ucenika bez izostanaka","ucenika sa opravdanim","broj opravdanih","ucenika sa neopravdanim","broj neopravdanih","ucenika sa neregulisanim","broj neregulisanih","ukupno izostanaka","broj izostanaka po uceniku","godina","odeljenje","pandemija"
+"polugodiste","ucenika.sa.izostancima","ucenika.bez.izostanaka","ucenika.sa.opravdanim","broj.opravdanih","ucenika.sa neopravdanim","broj.neopravdanih","ucenika.sa.neregulisanim","broj.neregulisanih","ukupno.izostanaka","broj.izostanaka.po uceniku","godina","odeljenje","pandemija"
 1,"27","3","27","883","1","2","0","0","885","29.5","I","1",TRUE
 2,"28","2","27","756","8","12","0","0","768","25.6","I","1",TRUE
 1,"22","9","22","346","0","0","0","0","346","11.16","I","2",TRUE

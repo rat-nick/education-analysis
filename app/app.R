@@ -6,10 +6,11 @@ library(plotly)
 library(ggcorrplot)
 source("../scripts/r/data_import.R")
 source("../scripts/r/wrangling.R")
-
+# UI definition ----
 ui <- dashboardPage(
     skin = "black",
     dashboardHeader(title = "EduBoard"),
+    # Sidebar definitions -------------------------
     dashboardSidebar(sidebarMenu(
         menuItem(
             text = "Uspeh ucenika",
@@ -22,62 +23,83 @@ ui <- dashboardPage(
             icon = icon("clipboard")
         )
     )),
-    
+    # Dashboard body definition ----------------
     dashboardBody(tabItems(
-        tabItem(
-            tabName = "uspeh",
-            fluidRow(
-                box(
-                    width = 12,
-                    collapsible = T,
-                    title = "Podaci po predmetima",
-                    fluidRow(box(
-                        selectInput(
-                            inputId = "uspeh_godine",
-                            choices = NULL,
-                            multiple = T,
-                            label = "Izaberite razrede",
-                        )
-                    ),
+        # Uspeh tab ----------------------
+        tabItem(tabName = "uspeh",
+                fluidRow(
                     box(
-                        selectInput(
-                            inputId = "uspeh_predmeti",
-                            choices = NULL,
-                            multiple = T,
-                            label = "Izaberite predmete",
-                        )
-                    )),
-                    fluidRow(box(width = 6, plotlyOutput("uspehCompHist")),
-                             box(width = 6, plotlyOutput("corrPlot"))),
-                    box(
-                        sliderInput(
-                            "numSubjects",
-                            "Broj predmeta",
-                            min = 1,
-                            max = 10,
-                            value = 3
+                        width = 12,
+                        collapsible = T,
+                        title = "Podaci po predmetima",
+                        fluidRow(
+                            box(
+                                collapsible = T,
+                                selectInput(
+                                    inputId = "uspeh_godine",
+                                    choices = NULL,
+                                    multiple = T,
+                                    label = "Izaberite razrede"
+                                )
+                            ),
+                            box(
+                                collapsible = T,
+                                selectInput(
+                                    inputId = "uspeh_predmeti",
+                                    choices = NULL,
+                                    multiple = T,
+                                    label = "Izaberite predmete"
+                                )
+                            )
                         ),
-                        
-                        checkboxInput("poslednji", "Najmanja promena"),
-                        plotlyOutput("najpogodjenijiPredmeti")
+                        fluidRow(
+                            box(
+                                collapsible = T,
+                                width = 6,
+                                plotlyOutput("uspehCompHist")
+                            ),
+                            box(
+                                collapsible = T,
+                                width = 6,
+                                plotlyOutput("corrPlot")
+                            )
+                        ),
+                        box(
+                            collapsible = T,
+                            checkboxInput("poslednji", "Najmanja promena"),
+                            plotlyOutput("najpogodjenijiPredmeti"),
+                            sliderInput(
+                                "numSubjects",
+                                "Broj predmeta",
+                                min = 1,
+                                max = 10,
+                                value = 3
+                            )
+                        )
                     )
-                )
-            ),
-            tabItem(tabName = 'izostanci',
-                    fluidRow(box(
-                        width = 12,
-                        dataTableOutput("studentAttendanceDataTable")
-                    )),
-                    fluidRow(box(
-                        width = 12,
-                        dataTableOutput("classAttendanceDataTable")
-                    )))
-        )
+                )),
+        # Izostanci tab -------------------------------
+        tabItem(tabName = 'izostanci',
+                fluidRow(box(
+                    width = 12,
+                    dataTableOutput("studentAttendanceDataTable")
+                )),
+                fluidRow(box(
+                    selectInput("attendanceColSelect", "Izaberite statistiku",choices = NULL),
+                    width = 12,
+                    plotlyOutput("saDensity"),
+                    sliderInput('saNumBins', min = 10, max = 50, label = "Velicina grupe", value= 20)
+                )),
+                fluidRow(box(
+                    width = 12,
+                    dataTableOutput("classAttendanceDataTable")
+                )))
     ))
 )
 
 
 
+# server definition ------
 server <- function(input, output, session) {
     data <- read.csv("../data/all_grades.csv")
     class_attendance_data <-
@@ -86,7 +108,7 @@ server <- function(input, output, session) {
     rv <- reactiveValues()
     rv$data <- data
     rv$ca_data <- class_attendance_data
-    
+
     filtered <- reactive({
         df <- rv$data
         print(input$uspeh_godine)
@@ -182,8 +204,38 @@ server <- function(input, output, session) {
         ggcorrplot(
             corr,
             type = "lower",
-            outline.color = 'white'
-        ) + ggtitle("Korelacija proseka ocena")
+            outline.color = 'white',
+            show.legend = T
+        ) +
+            ggtitle("Korelacija proseka ocena") +
+            theme(axis.text.x = element_blank(),
+                  axis.ticks = element_blank())
+        
+    })
+    
+    observe({
+        updateSelectInput(session = session, inputId = "attendanceColSelect", choices = names(isolate(rv$ca_data))[2:11])
+    })
+    
+    selected <- reactive({
+        df <- rv$ca_data %>% select(c(input$attendanceColSelect, 1, 12, 14))
+        df <- as.tibble(df)
+        print(head(df))
+    })
+    
+    output$saDensity <- renderPlotly({
+        
+        selectedAxis <- input$attendanceColSelect
+        print(selectedAxis[[1]][1])
+        rv$ca_data %>% 
+            ggplot(aes_string(x = selectedAxis )) + 
+            geom_histogram(data=subset(rv$ca_data, pandemija==F), aes(y=1*..count.., fill=pandemija), alpha = .5, bins = input$saNumBins) +
+            geom_histogram(data=subset(rv$ca_data, pandemija==T), aes(y=-1*..count.., fill=pandemija), alpha = .5, bins = input$saNumBins) +
+            facet_grid(~ polugodiste) + 
+            theme_minimal() + ggtitle("Histogram prisustva po odeljenjima") + 
+            ylab("broj odeljenja") +
+            xlab(selectedAxis)
+            
     })
 }
 shinyApp(ui, server)
