@@ -7,6 +7,7 @@ source("../scripts/r/data_import.R")
 source("../scripts/r/wrangling.R")
 
 ui <- dashboardPage(
+    skin = "black",
     dashboardHeader(title = "EduBoard"),
     dashboardSidebar(sidebarMenu(
         menuItem(
@@ -21,39 +22,56 @@ ui <- dashboardPage(
         )
     )),
     
-    dashboardBody(tabItems(
-        tabItem(tabName = "uspeh",
-                fluidRow(box(
-                    selectInput(
-                        inputId = "uspeh_godine",
-                        choices = NULL,
-                        multiple = T,
-                        label = "Izaberite razrede"
-                    )
-                ),
-                box(
-                    selectInput(
-                        inputId = "uspeh_predmeti",
-                        choices = NULL,
-                        multiple = T,
-                        label = "Izaberite predmete"
+    dashboardBody(
+        tabItems(
+            tabItem(
+                tabName = "uspeh",
+                fluidRow(
+                    box(width = 12,
+                        collapsible = T,
+                        title = "Podaci po predmetima",
+                        fluidRow(
+                            box(selectInput(
+                                inputId = "uspeh_godine",
+                                choices = NULL,
+                                multiple = T,
+                                label = "Izaberite razrede",
+                            )),
+                            box(selectInput(
+                                inputId = "uspeh_predmeti",
+                                choices = NULL,
+                                multiple = T,
+                                label = "Izaberite predmete",
+                            ))
+                        ),
+                        fluidRow(
+                            box(width = 6, plotlyOutput("uspehCompHist")),
+                            box(width = 6, plotlyOutput("corrPlot"))
+                        ),
+                    box(
+                        sliderInput(
+                            "numSubjects",
+                            "Broj predmeta",
+                            min = 1,
+                            max = 10,
+                            value = 3
+                        ),
+                        checkboxInput("poslednji", "Najmanja promena"),
+                        plotlyOutput("najpogodjenijiPredmeti")
                     )
                 )),
+        tabItem(tabName = 'izostanci',
                 fluidRow(box(
-                    plotlyOutput("uspehCompHist")
-                ),
-                box(
-                    sliderInput("numSubjects", "Broj predmeta", min = 1, max = 10, value = 3),
-                    checkboxInput("poslednji", "Najmanja promena"),
-                    plotlyOutput("najpogodjenijiPredmeti")
-                ))),
-        tabItem(
-            tabName = 'izostanci',
-            fluidRow(dataTableOutput("studentAttendanceDataTable")),
-            fluidRow(dataTableOutput("classAttendanceDataTable"))
-        )
+                    width = 12,
+                    dataTableOutput("studentAttendanceDataTable")
+                )),
+                fluidRow(box(
+                    width = 12,
+                    dataTableOutput("classAttendanceDataTable")
+                )))
     ))
-)
+))
+
 
 
 server <- function(input, output, session) {
@@ -64,6 +82,7 @@ server <- function(input, output, session) {
     rv <- reactiveValues()
     rv$data <- data
     rv$ca_data <- class_attendance_data
+    
     filtered <- reactive({
         df <- rv$data
         print(input$uspeh_godine)
@@ -114,17 +133,23 @@ server <- function(input, output, session) {
     
     output$najpogodjenijiPredmeti <- renderPlotly({
         no_fac <- rv$data %>% filter(!grepl("факулта", predmet))
-        dT <- no_fac %>% filter(pandemija == T) %>% group_by(predmet) %>% summarise(prosek = mean(ocena))
-        dF <- no_fac %>% filter(pandemija == F) %>% group_by(predmet) %>% summarise(prosek = mean(ocena))
+        dT <-
+            no_fac %>% filter(pandemija == T) %>% group_by(predmet) %>% summarise(prosek = mean(ocena))
+        dF <-
+            no_fac %>% filter(pandemija == F) %>% group_by(predmet) %>% summarise(prosek = mean(ocena))
         
         multi <- if_else(input$poslednji, 1, -1)
         
-        df <- merge(x = dF, y = dT, by = "predmet") %>% 
+        df <- merge(x = dF, y = dT, by = "predmet") %>%
             mutate(promena = prosek.y - prosek.x)
-        df <- head(df[order(multi*df$promena), ], input$numSubjects)
+        df <-
+            head(df[order(multi * df$promena),], input$numSubjects)
         
-        df %>% ggplot(aes(x=reorder(predmet, promena), y=promena)) + 
-            geom_col(aes(stat = , fill=predmet)) + coord_flip()
+        df %>% ggplot(aes(x = reorder(predmet, promena), y = promena)) +
+            ggtitle("Promena proseka od pocetka pandemije") +
+            geom_col(aes(stat = , fill = predmet), alpha = .7) +
+            coord_flip() + theme_minimal() +
+            xlab("predmet") + theme(legend.position = "bottom")
         
         
     })
@@ -140,5 +165,6 @@ server <- function(input, output, session) {
         
         rv$ca_data[, cols]
     })
+
 }
 shinyApp(ui, server)
