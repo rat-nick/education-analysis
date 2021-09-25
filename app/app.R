@@ -3,6 +3,7 @@ library(shinydashboard)
 library(shiny)
 library(ggridges)
 library(plotly)
+library(ggcorrplot)
 source("../scripts/r/data_import.R")
 source("../scripts/r/wrangling.R")
 
@@ -22,32 +23,32 @@ ui <- dashboardPage(
         )
     )),
     
-    dashboardBody(
-        tabItems(
-            tabItem(
-                tabName = "uspeh",
-                fluidRow(
-                    box(width = 12,
-                        collapsible = T,
-                        title = "Podaci po predmetima",
-                        fluidRow(
-                            box(selectInput(
-                                inputId = "uspeh_godine",
-                                choices = NULL,
-                                multiple = T,
-                                label = "Izaberite razrede",
-                            )),
-                            box(selectInput(
-                                inputId = "uspeh_predmeti",
-                                choices = NULL,
-                                multiple = T,
-                                label = "Izaberite predmete",
-                            ))
-                        ),
-                        fluidRow(
-                            box(width = 6, plotlyOutput("uspehCompHist")),
-                            box(width = 6, plotlyOutput("corrPlot"))
-                        ),
+    dashboardBody(tabItems(
+        tabItem(
+            tabName = "uspeh",
+            fluidRow(
+                box(
+                    width = 12,
+                    collapsible = T,
+                    title = "Podaci po predmetima",
+                    fluidRow(box(
+                        selectInput(
+                            inputId = "uspeh_godine",
+                            choices = NULL,
+                            multiple = T,
+                            label = "Izaberite razrede",
+                        )
+                    ),
+                    box(
+                        selectInput(
+                            inputId = "uspeh_predmeti",
+                            choices = NULL,
+                            multiple = T,
+                            label = "Izaberite predmete",
+                        )
+                    )),
+                    fluidRow(box(width = 6, plotlyOutput("uspehCompHist")),
+                             box(width = 6, plotlyOutput("corrPlot"))),
                     box(
                         sliderInput(
                             "numSubjects",
@@ -56,21 +57,24 @@ ui <- dashboardPage(
                             max = 10,
                             value = 3
                         ),
+                        
                         checkboxInput("poslednji", "Najmanja promena"),
                         plotlyOutput("najpogodjenijiPredmeti")
                     )
-                )),
-        tabItem(tabName = 'izostanci',
-                fluidRow(box(
-                    width = 12,
-                    dataTableOutput("studentAttendanceDataTable")
-                )),
-                fluidRow(box(
-                    width = 12,
-                    dataTableOutput("classAttendanceDataTable")
-                )))
+                )
+            ),
+            tabItem(tabName = 'izostanci',
+                    fluidRow(box(
+                        width = 12,
+                        dataTableOutput("studentAttendanceDataTable")
+                    )),
+                    fluidRow(box(
+                        width = 12,
+                        dataTableOutput("classAttendanceDataTable")
+                    )))
+        )
     ))
-))
+)
 
 
 
@@ -143,7 +147,7 @@ server <- function(input, output, session) {
         df <- merge(x = dF, y = dT, by = "predmet") %>%
             mutate(promena = prosek.y - prosek.x)
         df <-
-            head(df[order(multi * df$promena),], input$numSubjects)
+            head(df[order(multi * df$promena), ], input$numSubjects)
         
         df %>% ggplot(aes(x = reorder(predmet, promena), y = promena)) +
             ggtitle("Promena proseka od pocetka pandemije") +
@@ -165,6 +169,21 @@ server <- function(input, output, session) {
         
         rv$ca_data[, cols]
     })
-
+    
+    output$corrPlot <- renderPlotly({
+        df <- filtered() %>%
+            group_by(ucenik, predmet) %>%
+            summarise(prosek = mean(ocena)) %>%
+            pivot_wider(names_from = "predmet", values_from = "prosek") %>%
+            data.frame() %>% select(-c("ucenik"))
+        
+        
+        corr <- cor(df, use = "pairwise.complete.obs")
+        ggcorrplot(
+            corr,
+            type = "lower",
+            outline.color = 'white'
+        ) + ggtitle("Korelacija proseka ocena")
+    })
 }
 shinyApp(ui, server)
