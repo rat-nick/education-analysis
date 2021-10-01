@@ -27,7 +27,8 @@ load_grades <- function(data_dir, is_pandemic) {
             )
         
         gradjansko <-  "Грађанско.васпитање..обавезни.изборни."
-        veronauka <- "Верска.настава...православни.катихизис..обавезни.изборни."
+        veronauka <-
+            "Верска.настава...православни.катихизис..обавезни.изборни."
         
         drop <- c(gradjansko, veronauka)
         
@@ -36,7 +37,7 @@ load_grades <- function(data_dir, is_pandemic) {
         data <- data[, !names(data) %in% drop]
         
         
-        data$ucenik <- md5(paste(data[, 1], stri_rand_strings(1,4)))
+        data$ucenik <- md5(paste(data[, 1], stri_rand_strings(1, 4)))
         data <- select(data, -1)
         data <- head(data, -1)
         
@@ -46,7 +47,7 @@ load_grades <- function(data_dir, is_pandemic) {
         for (predmet in predmeti) {
             tmp <- separate_rows(data %>% select(ucenik, predmet), predmet) %>%
                 drop_na() %>%
-                gather(predmet, key = 'predmet', value = 'ocena') %>% 
+                gather(predmet, key = 'predmet', value = 'ocena') %>%
                 filter(ocena != "")
             tmp$godina <- godina
             tmp$odeljenje <- odeljenje
@@ -74,10 +75,11 @@ load_attendance <- function(data_dir, is_pandemic) {
     
     file_names <- dir(data_dir)
     
-    for (f in file_names){
+    for (f in file_names) {
         path <- paste(data_dir, f, sep = "")
         
-        str <- f %>% substr(1, nchar(f) - 4) %>% str_split(pattern = "-")
+        str <-
+            f %>% substr(1, nchar(f) - 4) %>% str_split(pattern = "-")
         str <- str[[1]]
         
         godina <- str[1]
@@ -100,8 +102,11 @@ load_attendance <- function(data_dir, is_pandemic) {
             "ukupno izostanaka",
             "broj izostanaka po uceniku"
         )
-        df1 <- df1[-c(1,4),]
-        df1$polugodiste <- if_else(df1$polugodiste == "Прво", 1, 2)
+        df1 <- df1[-c(1), ]
+        df1$polugodiste <-
+            if_else(df1$polugodiste == "Прво",
+                    1,
+                    if_else(df1$polugodiste == "Друго", 2, 0))
         df1$godina <- c(godina)
         df1$odeljenje <- c(odeljenje)
         df1$pandemija <- is_pandemic
@@ -116,4 +121,3 @@ df2 <- load_attendance("data/pre-covid/prisustvo/", F)
 df <- rbind(df1, df2)
 
 write.csv(df, file = "summary_attendance.csv", row.names = F)
-

@@ -4,8 +4,10 @@ library(shiny)
 library(ggridges)
 library(plotly)
 library(ggcorrplot)
-source("../scripts/r/data_import.R")
-source("../scripts/r/wrangling.R")
+library(stringr)
+library(ggthemes)
+source("scripts/data_import.R")
+source("scripts/wrangling.R")
 # UI definition ----
 ui <- dashboardPage(
     skin = "black",
@@ -80,20 +82,50 @@ ui <- dashboardPage(
                 )),
         # Izostanci tab -------------------------------
         tabItem(tabName = 'izostanci',
-                fluidRow(box(
-                    width = 12,
-                    dataTableOutput("studentAttendanceDataTable")
-                )),
-                fluidRow(box(
-                    selectInput("attendanceColSelect", "Izaberite statistiku",choices = NULL),
-                    width = 12,
-                    plotlyOutput("saDensity"),
-                    sliderInput('saNumBins', min = 10, max = 50, label = "Velicina grupe", value= 20)
-                )),
-                fluidRow(box(
-                    width = 12,
-                    dataTableOutput("classAttendanceDataTable")
-                )))
+                fluidRow(
+                    box(
+                        width = 12,
+                        dataTableOutput("studentAttendanceDataTable"),
+                        collapsible = T
+                    )
+                ),
+                fluidRow(
+                    box(
+                        width = 12,
+                        column(
+                            width = 4,
+                            selectInput("attendanceColSelect", "Izaberite statistiku", choices = NULL)
+                        ),
+                        column(
+                            width = 4,
+                            selectInput(
+                                "period",
+                                "Izaberite period",
+                                choices = c("I polugodište", "II polugodište", "ukupno"),
+                                selected = "ukupno"
+                            )
+                        ),
+                        fluidRow(column(
+                            width = 10,
+                            plotlyOutput("saDensity", height = 700),
+                        ), column(width = 2, textOutput("avgDiff"))),
+                        sliderInput(
+                            'saNumBins',
+                            min = 5,
+                            max = 30,
+                            label = "Broj grupa",
+                            value = 10
+                        )
+                        
+                    )
+                ),
+                fluidRow(
+                    box(
+                        width = 12,
+                        dataTableOutput("classAttendanceDataTable"),
+                        collapsible = T
+                    )
+                ))
     ))
 )
 
@@ -101,14 +133,14 @@ ui <- dashboardPage(
 
 # server definition ------
 server <- function(input, output, session) {
-    data <- read.csv("../data/all_grades.csv")
+    data <- read.csv("data/all_grades.csv")
     class_attendance_data <-
-        read.csv("../data/summary_attendance.csv")
+        read.csv("data/summary_attendance.csv")
     
     rv <- reactiveValues()
     rv$data <- data
     rv$ca_data <- class_attendance_data
-
+    
     filtered <- reactive({
         df <- rv$data
         print(input$uspeh_godine)
@@ -169,7 +201,7 @@ server <- function(input, output, session) {
         df <- merge(x = dF, y = dT, by = "predmet") %>%
             mutate(promena = prosek.y - prosek.x)
         df <-
-            head(df[order(multi * df$promena), ], input$numSubjects)
+            head(df[order(multi * df$promena),], input$numSubjects)
         
         df %>% ggplot(aes(x = reorder(predmet, promena), y = promena)) +
             ggtitle("Promena proseka od pocetka pandemije") +
@@ -193,28 +225,37 @@ server <- function(input, output, session) {
     })
     
     output$corrPlot <- renderPlotly({
-        df <- filtered() %>%
-            group_by(ucenik, predmet) %>%
-            summarise(prosek = mean(ocena)) %>%
-            pivot_wider(names_from = "predmet", values_from = "prosek") %>%
-            data.frame() %>% select(-c("ucenik"))
-        
-        
-        corr <- cor(df, use = "pairwise.complete.obs")
-        ggcorrplot(
-            corr,
-            type = "lower",
-            outline.color = 'white',
-            show.legend = T
-        ) +
-            ggtitle("Korelacija proseka ocena") +
-            theme(axis.text.x = element_blank(),
-                  axis.ticks = element_blank())
-        
+        if (length(input$uspeh_predmeti) == 1) {
+            ggplot() + ggtitle("Izaberite vise od jednog predemet da biste videli grafik korelacije")
+            
+        }
+        else{
+            df <- filtered() %>%
+                group_by(ucenik, predmet) %>%
+                summarise(prosek = mean(ocena)) %>%
+                pivot_wider(names_from = "predmet", values_from = "prosek") %>%
+                data.frame() %>% select(-c("ucenik"))
+            
+            
+            corr <- cor(df, use = "pairwise.complete.obs")
+            ggcorrplot(
+                corr,
+                type = "lower",
+                outline.color = 'white',
+                show.legend = T
+            ) +
+                ggtitle("Korelacija proseka ocena") +
+                theme(axis.text.x = element_blank(),
+                      axis.ticks = element_blank())
+        }
     })
     
     observe({
-        updateSelectInput(session = session, inputId = "attendanceColSelect", choices = names(isolate(rv$ca_data))[2:11])
+        updateSelectInput(
+            session = session,
+            inputId = "attendanceColSelect",
+            choices = names(isolate(rv$ca_data))[2:11]
+        )
     })
     
     selected <- reactive({
@@ -224,18 +265,58 @@ server <- function(input, output, session) {
     })
     
     output$saDensity <- renderPlotly({
-        
         selectedAxis <- input$attendanceColSelect
-        print(selectedAxis[[1]][1])
-        rv$ca_data %>% 
-            ggplot(aes_string(x = selectedAxis )) + 
-            geom_histogram(data=subset(rv$ca_data, pandemija==F), aes(y=1*..count.., fill=pandemija), alpha = .5, bins = input$saNumBins) +
-            geom_histogram(data=subset(rv$ca_data, pandemija==T), aes(y=-1*..count.., fill=pandemija), alpha = .5, bins = input$saNumBins) +
-            facet_grid(~ polugodiste) + 
-            theme_minimal() + ggtitle("Histogram prisustva po odeljenjima") + 
-            ylab("broj odeljenja") +
-            xlab(selectedAxis)
-            
+        df <-
+            rv$ca_data %>% mutate(
+                polugodiste = if_else(
+                    polugodiste == 1,
+                    "I polugodište",
+                    if_else(polugodiste == 2, "II polugodište", "ukupno")
+                ),
+                pandemija = if_else(pandemija == T, "Tokom pandemije", "Pre pandemije")
+            ) %>%
+            filter(polugodiste %in% input$period)
+        
+        srednja_vrednost_tokom_pandemije <-
+            mean(df[df$pandemija == "Tokom pandemije", selectedAxis])
+        srednja_vrednost_pre_pandemije <-
+            mean(df[df$pandemija == "Pre pandemije", selectedAxis])
+        
+        promena_srednje_vrednosti <-
+            srednja_vrednost_tokom_pandemije - srednja_vrednost_pre_pandemije
+        
+        
+        base <-
+            data.frame(df) %>% ggplot(aes_string(x = selectedAxis))
+        base +
+            geom_vline(
+                aes(xintercept = srednja_vrednost_tokom_pandemije),
+                color = "blue",
+                linetype = "dashed",
+                size = 1
+            ) +
+            geom_histogram(
+                data = subset(df, pandemija == "Pre pandemije"),
+                aes(y = ..count.., fill = pandemija),
+                alpha = .7,
+                bins = input$saNumBins,
+                position = "identity"
+            ) +
+            #geom_density(data = subset(df, pandemija == "Pre pandemije"),alpha=.4, aes(y=-1*..count..)) +
+            geom_vline(
+                aes(xintercept = srednja_vrednost_pre_pandemije),
+                color = "red",
+                linetype = "dashed",
+                size = 1
+            ) +
+            geom_histogram(
+                data = subset(df, pandemija == "Tokom pandemije"),
+                aes(y = -1 * ..count.., fill = pandemija) ,
+                alpha = .7,
+                bins = input$saNumBins,
+                position = "identity"
+            ) + ylab("Broj odeljenja") +
+            ggtitle(label = "Statistika o izostancima po odeljenjima", subtitle = "Koliko odeljenja pripada određenoj grupi?")
     })
 }
 shinyApp(ui, server)
